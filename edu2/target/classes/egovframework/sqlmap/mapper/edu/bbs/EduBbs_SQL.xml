@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="board">
+
+	<!-- <select id="selectBoardList" resultType="egovMap"> SELECT BOARD_NO_KSM 
+		, BOARD_TITLE , BOARD_CONTENT , BOARD_WRITER , BOARD_WRITE_DATE , BOARD_REVISER 
+		, BOARD_REVISE_DATE , BOARD_CNT , BOARD_COMMENT_CNT , BOARD_PWD , BOARD_ORIGIN 
+		, BOARD_REF_NO , BOARD_KIND FROM TB_BOARD_KSM WHERE 1=1 AND BOARD_NO_KSM 
+		= #{boardNo} </select> -->
+
+
+	<!-- <select id="eduBbs.selectBoardListtest" resultType="egovMap"> select 
+		* from tb_board_ksm </select> -->
+
+	<sql id="search">
+		<if test="search_option == 'SO001'">
+			AND (TITLE LIKE '%'||#{keyword}||'%'
+			OR NICKNAME LIKE
+			'%'||#{keyword}||'%'
+			OR CONTENT LIKE '%'||#{keyword}||'%' )
+		</if>
+		<if test="search_option == 'SO004' ">
+			AND TITLE LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="search_option == 'SO002' ">
+			AND NICKNAME LIKE '%'||#{keyword}||'%'
+		</if>
+		<if test="search_option == 'SO003' ">
+			AND CONTENT LIKE '%'||#{keyword}||'%'
+		</if>
+	</sql>
+
+	<sql id="search_notice">
+		<if test="search_notice == 'SN001'">
+		</if>
+		<if test="search_notice == 'SN002' ">
+			AND NOTICE=0
+		</if>
+		<if test="search_notice == 'SN003' ">
+			AND NOTICE=1
+		</if>
+	</sql>
+
+
+	<select id="list" parameterType="java.util.Map" resultType="egovMap">
+	/*board.list*/
+		SELECT *
+		FROM (
+			SELECT ROWNUM AS RN, A.*
+			FROM(
+				SELECT
+					ROWNUM
+					, B.BOARD_ID
+					, B.TITLE
+					, B.CONTENT
+					, B.WRITEDATE
+					, B.MEMBER_ID
+					, B.HITCOUNT
+					, BM.BBS_NAME
+					, B.NOTICE
+					, (SYSDATE-WRITEDATE) AS POPNEW
+					, POST_END
+					, SECRET_CHECK
+					, M.NICKNAME
+					, BM.BBS_ID
+					, BM.BBS_READ
+					, BM.BBS_WRITE
+					, BM.BBS_DEL
+					, BM.BBS_NOTICE
+			FROM
+				TB_BOARD_LSH B
+			JOIN
+				TB_BOARD_MGR_LSH BM
+			ON
+				B.BBS_ID=BM.BBS_ID
+			JOIN
+				 TB_MEMBER_LSH M
+			ON
+				 B.MEMBER_ID=M.MEMBER_ID
+			WHERE
+				B.BBS_ID=#{bbsId}
+			AND <![CDATA[(POST_END IS NULL OR POST_END>SYSDATE)]]>
+			AND DEL_DATE IS NULL
+			<include refid="search" />
+			<include refid="search_notice" />
+			ORDER BY BOARD_ID DESC
+			) A
+		) WHERE RN BETWEEN #{start} AND #{end}
+	</select>
+
+	<select id="notice" parameterType="java.util.Map" resultType="egovMap">
+		/*board.notice*/
+		SELECT
+			B.BOARD_ID
+			, B.TITLE
+			, B.CONTENT
+			, B.WRITEDATE
+			, B.MEMBER_ID
+			, B.HITCOUNT
+			, BM.BBS_NAME
+			, B.NOTICE
+			, (SYSDATE-WRITEDATE) AS POPNEW
+			, POST_END
+			, SECRET_CHECK
+			, (SELECT NICKNAME
+				FROM TB_MEMBER_LSH
+				WHERE B.MEMBER_ID=TB_MEMBER_LSH.MEMBER_ID)
+				AS NICKNAME
+			, B.BBS_ID
+			, BM.BBS_READ
+			, BM.BBS_WRITE
+			, BM.BBS_DEL
+			, BM.BBS_NOTICE
+		FROM
+			TB_BOARD_LSH B
+		JOIN 
+			TB_BOARD_MGR_LSH BM 
+		ON
+			 B.BBS_ID=BM.BBS_ID
+		WHERE
+			B.BBS_ID=#{bbsId} AND NOTICE=1 AND <![CDATA[(POST_END IS NULL OR POST_END>SYSDATE)]]>
+		ORDER BY BOARD_ID DESC
+	</select>
+	
+	<select id="bbsCondition" parameterType="java.util.Map" resultType="egovMap">
+	/*board.bbsCondition*/
+	SELECT
+		 BBS_ID
+		 , BBS_NAME
+		 , BBS_READ
+		 , BBS_WRITE
+		 , BBS_DEL
+		 , BBS_USE
+		 , BBS_NOTICE
+	FROM
+		 TB_BOARD_MGR_LSH
+	WHERE
+		 BBS_ID=${bbsId}
+	</select>
+
+
+	<select id="detail" parameterType="java.util.Map" resultType="egovMap">
+		/* board.detail */
+		SELECT BOARD_ID
+			, TITLE
+			, CONTENT
+			, WRITEDATE
+			, HITCOUNT
+			, MEMBER_ID
+			, (SELECT NICKNAME
+				FROM TB_MEMBER_LSH M
+				WHERE M.MEMBER_ID=B.MEMBER_ID) AS NICKNAME
+			, BBS_ID
+            , (SELECT BBS_NAME FROM TB_BOARD_MGR_LSH BM WHERE BM.BBS_ID = B.BBS_ID) AS BBS_NAME
+			, SECRET_CHECK
+			, NOTICE
+			, POST_END
+			, SECRET_CHECK
+		FROM TB_BOARD_LSH B
+		WHERE BOARD_ID = #{boardId}
+	</select>
+
+
+	<insert id="writeInsert" parameterType="egovMap">
+		/*board.writeInsert*/
+		<selectKey resultType="int" keyProperty="boardID"
+			order="BEFORE">
+			SELECT MAX(BOARD_ID)+1 FROM TB_BOARD_LSH
+		</selectKey>
+		INSERT INTO TB_BOARD_LSH(
+		BOARD_ID
+		, TITLE
+		, CONTENT
+		, WRITEDATE
+		, MEMBER_ID
+		, HITCOUNT
+		, BBS_ID
+		, NOTICE
+		, POST_END
+		, SECRET_CHECK)
+		VALUES
+		(
+		#{boardID}
+		, #{title}
+		, #{content}
+		, SYSDATE
+		, 1
+		, 0
+		, #{bbsId}
+		, #{notice}
+		, #{postEnd}
+		, #{secretCheck})
+	</insert>
+
+	<select id="bbsList" resultType="egovMap">
+		/*board.bbslist*/
+		SELECT
+			BBS_ID
+			, BBS_NAME
+			, BBS_REG_DATE
+			, BBS_RIV_DATE
+			, BBS_READ
+			, BBS_WRITE
+			, BBS_DEL
+			, BBS_USE
+			, BBS_NOTICE
+		FROM
+		TB_BOARD_MGR_LSH
+		ORDER BY BBS_REG_DATE
+	</select>
+
+	<select id="bbsDetail" parameterType="java.util.Map"
+		resultType="egovMap">
+		/*board.bbsDetail*/
+		SELECT BBS_ID
+			, BBS_NAME
+			, BBS_REG_DATE
+			, BBS_RIV_DATE
+			, BBS_READ
+			, BBS_WRITE
+			, BBS_DEL
+			, BBS_USE
+			, BBS_NOTICE
+		FROM
+		TB_BOARD_MGR_LSH
+		WHERE BBS_ID=#{bbsId}
+	</select>
+
+	<update id="updateBbsDetail" parameterType="egovMap">
+		/*board.updateBbsDetail*/
+		UPDATE
+			TB_BOARD_MGR_LSH
+		SET
+			BBS_NAME=#{bbsName}
+			, BBS_READ= #{bbsRead}
+			, BBS_WRITE= #{bbsWrite}
+			, BBS_DEL= #{bbsDel}
+			, BBS_USE= #{bbsUse}
+			, BBS_NOTICE= #{bbsNotice}
+		WHERE
+			 BBS_ID = #{bbsId}
+	</update>
+
+	<insert id="insertBbs" parameterType="egovMap">
+		/*board.insertBbs*/
+		<selectKey resultType="int" keyProperty="bbsId"
+			order="BEFORE">
+			SELECT MAX(BBS_ID)+1 FROM TB_BOARD_MGR_LSH
+		</selectKey>
+		INSERT INTO
+		TB_BOARD_MGR_LSH(
+			BBS_ID
+			, BBS_NAME
+			, BBS_REG_DATE
+			, BBS_READ
+			, BBS_WRITE
+			, BBS_DEL
+			, BBS_USE
+			, BBS_NOTICE
+		)
+		VALUES
+		( #{bbsId}
+		, #{bbsName}
+		, SYSDATE
+		, #{bbsRead}
+		, #{bbsWrite}
+		, #{bbsDel}
+		, #{bbsUse}
+		, #{bbsNotice})
+	</insert>
+
+	<update id="updateDeleteBoard" parameterType="egovMap">
+		/*board.updateDeleteBoard*/
+		UPDATE
+			TB_BOARD_LSH
+		SET
+			DEL_DATE=SYSDATE
+		WHERE
+			BOARD_ID=#{boardId}
+	</update>
+
+
+	<select id="selectLeg" parameterType="java.util.Map"
+		resultType="egovMap">
+		/*board.selectLeg*/
+		SELECT *
+			FROM(
+				SELECT BOARD_ID
+					, TITLE
+					, LAG(BOARD_ID) OVER (ORDER BY BOARD_ID) AS BEFORE_ID
+					, LAG(TITLE) OVER (ORDER BY TITLE) AS BEFORE_NAME
+				FROM 
+					TB_BOARD_LSH
+				WHERE 
+					BBS_ID= #{bbsId}
+				AND 
+					DEL_DATE IS NULL
+				AND 
+					(POST_END IS NULL OR POST_END>SYSDATE)
+				ORDER BY BOARD_ID
+				)
+		WHERE
+			BOARD_ID = #{boardId}
+	</select>
+
+	<select id="selectLead" parameterType="java.util.Map"
+		resultType="egovMap">
+		/*board.selectLead*/
+		SELECT *
+		FROM(
+			SELECT BOARD_ID
+			, TITLE
+			, LEAD(BOARD_ID) OVER (ORDER BY BOARD_ID) AS AFTER_ID
+			, LEAD(TITLE) OVER (ORDER BY TITLE) AS AFTER_NAME
+			FROM 
+				TB_BOARD_LSH
+			WHERE 
+				BBS_ID= #{bbsId}
+			AND 
+				DEL_DATE IS NULL
+			AND 
+				(POST_END IS NULL OR POST_END>SYSDATE)
+			ORDER BY BOARD_ID
+			)
+		WHERE 
+			BOARD_ID = #{boardId}
+	</select>
+
+	<select id="selectCountList" parameterType="java.util.Map"
+		resultType="int">
+		/*board.selectCountList*/
+		SELECT
+			 COUNT(*)
+		FROM
+			 TB_BOARD_LSH 
+		LEFT JOIN
+			 TB_MEMBER_LSH 
+		ON
+			 TB_BOARD_LSH.MEMBER_ID=TB_MEMBER_LSH.MEMBER_ID
+		WHERE
+			 BBS_ID=#{bbsId} AND (DEL_DATE IS NULL) AND (POST_END IS NULL OR POST_END>SYSDATE)
+		<include refid="search" />
+		<include refid="search_notice" />
+	</select>
+
+	<update id="updateHitCnt" parameterType="java.util.Map">
+	/*board.updateHitCnt*/
+		UPDATE 
+			TB_BOARD_LSH
+		SET
+			HITCOUNT = NVL(HITCOUNT, 0) + 1
+		WHERE
+			BOARD_ID = ${boardId}
+	</update>
+
+	<update id="updateBoard" parameterType="egovMap">
+	/*board.updateBoard*/
+		UPDATE TB_BOARD_LSH
+		SET
+			TITLE = #{title}
+			, CONTENT=#{content}
+			, RIV_DATE=SYSDATE
+			, RIV_ID=1
+			, NOTICE=#{notice}
+			, POST_END=#{postEnd}
+			, SECRET_CHECK=#{secretCheck}
+		WHERE BOARD_ID=#{boardId}
+	</update>
+	
+	<select id="selectSN" resultType="egovMap">
+	/*board.selectSN*/
+		SELECT 
+			  OPTION_ID
+			, OPTION_NAME
+			, OPTIONMASTER_ID
+	FROM
+			 TB_OPTION_LSH
+	WHERE
+			 OPTIONMASTER_ID='1'
+	</select>
+	
+	<select id="selectSO" resultType="egovMap">
+	/*board.selectSO*/
+		SELECT
+			   OPTION_ID
+			 , OPTION_NAME
+			 , OPTIONMASTER_ID
+	FROM 
+			TB_OPTION_LSH
+	WHERE 
+			OPTIONMASTER_ID='2'
+	</select>
+
+
+</mapper>
+	
+	
+	
+	
+	
+
